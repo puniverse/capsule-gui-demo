@@ -1,0 +1,185 @@
+apply plugin: 'java'
+apply plugin:'application'
+
+sourceCompatibility = '1.8'
+targetCompatibility = '1.8'
+
+[compileJava, compileTestJava]*.options*.encoding = 'UTF-8'
+
+mainClassName = "foo.Main"
+
+group       = "co.paralleluniverse"
+version     = "0.2.0"
+status      = "integration"
+description = "A demo using Capsule"
+
+repositories {
+    mavenLocal()
+    mavenCentral()
+}
+
+configurations {
+    capsule
+    quasar
+    provided
+}
+
+sourceSets {
+    main.compileClasspath = main.compileClasspath + configurations.provided
+    test.compileClasspath = test.compileClasspath + configurations.provided
+    test.runtimeClasspath = test.runtimeClasspath + configurations.provided
+}
+
+dependencies {
+    capsule 'co.paralleluniverse:capsule:1.0-rc1-SNAPSHOT'
+    capsule 'co.paralleluniverse:capsule-maven:1.0-rc1-SNAPSHOT'
+    provided 'co.paralleluniverse:capsule:1.0-rc1-SNAPSHOT' // for the MyCapsule caplet
+    compile ('co.paralleluniverse:quasar-core:0.6.2:jdk8')  {
+        exclude group: 'org.slf4j', module: '*'
+        exclude group: 'org.apache.logging.log4j', module: '*'
+        exclude group: 'org.apache.ant', module: '*'
+    }
+    quasar  "co.paralleluniverse:quasar-core:0.6.2:jdk8"
+    testCompile group: 'junit', name: 'junit', version: '4.10'
+}
+
+tasks.withType(JavaExec) {
+    standardInput = System.in
+
+    jvmArgs '-server'
+    jvmArgs "-javaagent:${configurations.quasar.iterator().next()}" // =vdmc (verbose, debug, allow monitors, check class)
+    // systemProperty "co.paralleluniverse.fibers.DefaultFiberPool.parallelism", "4"
+    systemProperty "co.paralleluniverse.fibers.DefaultFiberPool.monitor", "JMX" // "METRICS" // "NONE" //
+    systemProperty "co.paralleluniverse.actors.moduleDir", "${rootProject.projectDir}/modules"
+
+    // memory
+    jvmArgs '-Xmx1024m'
+}
+
+apply plugin: 'maven'
+
+task writePom << {
+    pom {
+        project {
+            groupId 'com.acme'
+            artifactId 'foo'
+            version '1.0'
+        }
+    }.writeTo("$buildDir/pom.xml")
+}
+
+// converts Gradle dependencies into Capsule dependencies
+def getDependencies(config) {
+    return config.getAllDependencies().collect {
+        def res = it.group + ':' + it.name + ':' + it.version + (!it.artifacts.isEmpty() ? ':' + it.artifacts.iterator().next().classifier : '')
+        if(!it.excludeRules.isEmpty()) {
+            res += "(" + it.excludeRules.collect { it.group + ':' + it.module }.join(',') + ")"
+        }
+        return res
+    }
+}
+
+// creates a "thin" capsule, with the dependencies listen in the manifest
+task capsule(type: Jar, dependsOn: classes) {
+    archiveName = "foo.jar"
+    from sourceSets.main.output // this way we don't need to extract
+    from { configurations.capsule.collect { zipTree(it) } }
+    duplicatesStrategy 'exclude'
+
+    manifest {
+        attributes(
+	    'Main-Class'  :   'Capsule',
+            'Caplets'     :   'MavenCapsule',
+            'Application-Name' : 'GUI Capsule Demo',
+            'Application-Version' : '1.0',
+            'Application-Id' : 'co.paralleluniverse.gui-capsule-demo',
+            'Application-Class'   : mainClassName,
+            'GUI' : 'true',
+            'Icon': 'quickcast',
+            //'Extract-Capsule' : 'false',
+            'Min-Java-Version' : '1.8.0',
+            // 'Args' :     'hello world',
+            'JVM-Args' : run.jvmArgs.join(' '),
+            'System-Properties' : run.systemProperties.collect { k,v -> "$k=$v" }.join(' '),
+            'Java-Agents' : getDependencies(configurations.quasar).iterator().next(),
+            'Dependencies': getDependencies(configurations.runtime).join(' ')
+        )
+    }
+}
+
+// creates a "fat" capsule, with all dependencies embedded in the capsule
+task fatCapsule(type: Jar, dependsOn: jar) {
+    archiveName = "foo.jar"
+
+    from(configurations.capsule.collect { zipTree(it) }) { include 'Capsule.class' } // we just need the single Capsule class
+    // from(zipTree(jar.archivePath)) { include 'MyCapsule.class' } // - if we want a custom capsule
+
+    from jar // embed our application jar
+    from { configurations.runtime } // embed dependencies
+
+    manifest {
+        attributes(
+	    'Main-Class'  : 'Capsule', // 'MyCapsule', // - if we want a custom capsule
+            'Application-Name' : 'GUI Capsule Demo',
+            'Application-Version' : '1.0',
+            'Application-Id' : 'co.paralleluniverse.gui-capsule-demo',
+            'Application-Class' : mainClassName,
+            'GUI' : 'true',
+            'Min-Java-Version' : '1.8.0',
+            'JVM-Args' : run.jvmArgs.join(' '),
+            'System-Properties' : run.systemProperties.collect { k,v -> "$k=$v" }.join(' '),
+            'Java-Agents' : configurations.quasar.iterator().next().getName()
+        )
+    }
+}
+
+tasks.withType(Jar) {
+    doLast { task -> reallyExecutable(task) }
+}
+
+def reallyExecutable(jar) {
+    ant.concat(destfile: "tmp.jar", binary: true) {
+        zipentry(zipfile: configurations.capsule.first(), name: 'capsule/trampoline-execheader.sh')
+        fileset(dir: jar.destinationDir) {
+            include(name: jar.archiveName)
+        }
+    }
+    copy {
+        from 'tmp.jar'
+        into jar.destinationDir
+        rename { jar.archiveName }
+    }
+    delete 'tmp.jar'
+}
+
+//def reallyExecutable(jar) {
+//  def srcFile = new File(jar)
+//  def shortcutFile = new File("${buildDir}/denominator")
+//  shortcutFile.delete()
+//  shortcutFile << "#!/usr/bin/env sh\n"
+//  shortcutFile << 'exec java -jar $0 "$@"' + "\n"
+//  shortcutFile << srcFile.bytes
+//  shortcutFile.setExecutable(true, true)
+//  srcFile.delete()
+//  srcFile << shortcutFile.bytes
+//  srcFile.setExecutable(true, true)
+//}
+
+//jar {
+//    manifest {
+//        attributes(
+//	    'Main-Class'  : mainClassName,
+//        )
+//    }
+//}
+
+
+///////// Publish Artifacts
+apply plugin: 'maven'
+
+artifacts {
+    archives capsule
+}
+
+install.dependsOn capsule
+
