@@ -92,6 +92,7 @@ task capsule(type: Jar, dependsOn: classes) {
 
     manifest {
         attributes(
+            'Premain-Class' : 'Capsule', // Support Windows with correct exit, see #60
             'Main-Class'  :   'Capsule',
             'Application-Class'   : mainClassName,
             'Application-Name' : 'GUI Capsule Demo',
@@ -108,6 +109,7 @@ task capsule(type: Jar, dependsOn: classes) {
 
             'GUI' : 'true',
             'Icon': 'quickcast',
+            'Native-Platforms': 'CURRENT windows',
 
             'Caplets'     :   'MavenCapsule'
         )
@@ -127,6 +129,7 @@ task fatCapsule(type: Jar, dependsOn: jar) {
 
     manifest {
         attributes(
+            'Premain-Class' : 'Capsule', // Support Windows with correct exit, see #60
     	    'Main-Class'  : 'Capsule', // 'MyCapsule', // - if we want a custom capsule
             'Application-Name' : 'GUI Capsule Demo',
             'Application-Version' : '1.0',
@@ -138,6 +141,7 @@ task fatCapsule(type: Jar, dependsOn: jar) {
             'Java-Agents'       : getDependencies(configurations.quasar).iterator().next(),
 
             'GUI' : 'true',
+            'Native-Platforms': 'CURRENT windows'
         )
     }
 }
