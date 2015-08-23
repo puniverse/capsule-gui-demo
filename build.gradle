@@ -109,7 +109,11 @@ task capsule(type: Jar, dependsOn: classes) {
 
             'GUI' : 'true',
             'Icon': 'quickcast',
-            'Native-Platforms': 'CURRENT windows',
+            'Platforms': 'CURRENT windows',
+            'Single-Instance': 'true',
+            'Implementation-Vendor': 'foo inc',
+            'Native-Description': 'foo',
+            'Copyright': 'foo',
 
             'Caplets'     :   'MavenCapsule'
         )
