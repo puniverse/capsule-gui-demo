@@ -114,6 +114,7 @@ task capsule(type: Jar, dependsOn: classes) {
             'Implementation-Vendor': 'foo inc',
             'Native-Description': 'foo',
             'Copyright': 'foo',
+            'Internal-Name': 'foo',
 
             'Caplets'     :   'MavenCapsule'
         )
@@ -145,7 +146,13 @@ task fatCapsule(type: Jar, dependsOn: jar) {
             'Java-Agents'       : getDependencies(configurations.quasar).iterator().next(),
 
             'GUI' : 'true',
-            'Native-Platforms': 'CURRENT windows'
+            'Icon': 'quickcast',
+            'Platforms': 'CURRENT windows',
+            'Single-Instance': 'true',
+            'Implementation-Vendor': 'foo inc',
+            'Internal-Name': 'foo',
+            'Native-Description': 'foo',
+            'Copyright': 'foo',
         )
     }
 }
