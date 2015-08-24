@@ -20,6 +20,7 @@ repositories {
 
 configurations {
     capsule
+    capsuleSecure
     quasar
     provided
 }
@@ -33,6 +34,7 @@ sourceSets {
 dependencies {
     capsule 'co.paralleluniverse:capsule:1.0-rc2-SNAPSHOT'
     capsule 'co.paralleluniverse:capsule-maven:1.0-rc2-SNAPSHOT'
+    capsuleSecure 'co.paralleluniverse:capsule-secure:0.1.0-SNAPSHOT'
     provided 'co.paralleluniverse:capsule:1.0-rc2-SNAPSHOT' // for the MyCapsule caplet
     compile ('co.paralleluniverse:quasar-core:0.7.2:jdk8')  {
         exclude group: 'org.slf4j', module: '*'
@@ -107,15 +109,6 @@ task capsule(type: Jar, dependsOn: classes) {
             'Dependencies'      : getDependencies(configurations.runtime).join(' '),
             'Repositories'      : 'central https://oss.sonatype.org/content/repositories/snapshots',
 
-            'GUI' : 'true',
-            'Icon': 'quickcast',
-            'Platforms': 'CURRENT windows',
-            'Single-Instance': 'true',
-            'Implementation-Vendor': 'foo inc',
-            'Native-Description': 'foo',
-            'Copyright': 'foo',
-            'Internal-Name': 'foo',
-
             'Caplets'     :   'MavenCapsule'
         )
     }
@@ -144,15 +137,70 @@ task fatCapsule(type: Jar, dependsOn: jar) {
             'JVM-Args' : run.jvmArgs.join(' '),
             'System-Properties' : run.systemProperties.collect { k,v -> "$k=$v" }.join(' '),
             'Java-Agents'       : getDependencies(configurations.quasar).iterator().next(),
+        )
+    }
+}
 
-            'GUI' : 'true',
-            'Icon': 'quickcast',
-            'Platforms': 'CURRENT windows',
-            'Single-Instance': 'true',
-            'Implementation-Vendor': 'foo inc',
-            'Internal-Name': 'foo',
-            'Native-Description': 'foo',
-            'Copyright': 'foo',
+// creates a "thin" capsule, with the dependencies listed in the manifest
+task secureCapsule(type: Jar, dependsOn: classes) {
+    archiveName = "foo.jar"
+
+    from sourceSets.main.output // this way we don't need to extract
+
+    // we need all of Capsule's classes
+    from { configurations.capsule.collect { zipTree(it) } }
+    from { configurations.capsuleSecure.collect { zipTree(it) } }
+
+    duplicatesStrategy 'exclude'
+
+    manifest {
+        attributes(
+            'Premain-Class' : 'Capsule', // Support Windows with correct exit, see #60
+            'Main-Class'  :   'Capsule',
+            'Application-Class'   : mainClassName,
+            'Application-Name' : 'GUI Capsule Demo',
+            'Application-Version' : '1.0',
+            'Extract-Capsule'   : 'false', // don't extract capsule to the filesystem
+            'Application-Id' : 'co.paralleluniverse.gui-capsule-demo',
+            'Min-Java-Version' : '1.8.0',
+            // 'Args' :     'hello world',
+            'JVM-Args' : run.jvmArgs.join(' '),
+            'System-Properties' : run.systemProperties.collect { k,v -> "$k=$v" }.join(' '),
+            'Java-Agents'       : getDependencies(configurations.quasar).iterator().next(),
+            'Dependencies'      : getDependencies(configurations.runtime).join(' '),
+            'Repositories'      : 'central https://oss.sonatype.org/content/repositories/snapshots',
+
+            'Caplets'     :   'MavenCapsule SecureCapsule'
+        )
+    }
+}
+
+// creates a "fat" capsule, with all dependencies embedded in the capsule
+task secureFatCapsule(type: Jar, dependsOn: jar) {
+    archiveName = "foo.jar"
+
+    from jar // embed our application jar
+    from { configurations.runtime } // embed dependencies
+
+    from(configurations.capsule.collect { zipTree(it) }) { include 'Capsule.class' } // we just need the single Capsule class
+    from { configurations.capsuleSecure.collect { zipTree(it) } }
+    // from(zipTree(jar.archivePath)) { include 'MyCapsule.class' } // - if we want a custom capsule
+    duplicatesStrategy 'exclude'
+
+    manifest {
+        attributes(
+            'Premain-Class' : 'Capsule', // Support Windows with correct exit, see #60
+            'Main-Class'  : 'Capsule', // 'MyCapsule', // - if we want a custom capsule
+            'Application-Name' : 'GUI Capsule Demo',
+            'Application-Version' : '1.0',
+            'Application-Id' : 'co.paralleluniverse.gui-capsule-demo',
+            'Application-Class' : mainClassName,
+            'Min-Java-Version' : '1.8.0',
+            'JVM-Args' : run.jvmArgs.join(' '),
+            'System-Properties' : run.systemProperties.collect { k,v -> "$k=$v" }.join(' '),
+            'Java-Agents'       : getDependencies(configurations.quasar).iterator().next(),
+
+            'Caplets'     :   'SecureCapsule'
         )
     }
 }
