@@ -91,7 +91,7 @@ task capsule(type: Jar, dependsOn: classes) {
     duplicatesStrategy 'exclude'
 
     manifest {
-        attributes(
+        attributes (
             'Premain-Class' : 'Capsule', // Support Windows with correct exit, see #60
             'Main-Class'  :   'Capsule',
             'Application-Class'   : mainClassName,
